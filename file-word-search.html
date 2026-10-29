@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Search your file: linear vs binary search</title>
+<style>
+:root{
+  --bg:#F2F5F8;--surface:#FFFFFF;--ink:#13202C;--muted:#5A6B7A;--line:#D5DEE6;
+  --lin:#C2570C;--lin-soft:#FBE9DC;--bin:#0B6E7A;--bin-soft:#D9EFF1;--warn:#8A5A00;--warn-soft:#FFF1CC;
+  box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px);color-scheme:light;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#0F1820;--surface:#17232E;--ink:#E6EEF4;--muted:#9AAAB8;--line:#2B3A48;
+    --lin:#F0924F;--lin-soft:#3A2515;--bin:#4FC3CF;--bin-soft:#10343A;--warn:#F2C45A;--warn-soft:#3A2F10;color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#0F1820;--surface:#17232E;--ink:#E6EEF4;--muted:#9AAAB8;--line:#2B3A48;
+  --lin:#F0924F;--lin-soft:#3A2515;--bin:#4FC3CF;--bin-soft:#10343A;--warn:#F2C45A;--warn-soft:#3A2F10;color-scheme:dark;
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:inherit}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.5 "Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+main{max-width:880px;margin:0 auto;padding:28px 18px 40px}
+h1{font:700 clamp(28px,6vw,40px)/1.1 Cambria,Georgia,serif;margin:0 0 8px}
+.lede{color:var(--muted);margin:0 0 20px;max-width:60ch}
+.drop{display:block;border:2px dashed var(--line);border-radius:14px;background:var(--surface);padding:22px 18px;text-align:center;cursor:pointer}
+.drop.over{border-color:var(--bin);background:var(--bin-soft)}
+.drop b{display:block;font-size:18px}
+.drop span{color:var(--muted);font-size:14px}
+.drop input{position:absolute;opacity:0;width:1px;height:1px}
+.drop:focus-within{outline:3px solid var(--bin);outline-offset:2px}
+.status{margin:10px 0 18px;font-size:14px;color:var(--muted);min-height:1.5em}
+.status b{color:var(--ink)}
+.bar{display:flex;gap:8px;flex-wrap:wrap}
+.bar input[type=search]{flex:1 1 220px;min-width:0;font:inherit;font-size:18px;padding:12px 14px;border:2px solid var(--line);border-radius:10px;background:var(--surface);color:var(--ink)}
+button{font:inherit;color:var(--ink);cursor:pointer;border:1px solid var(--line);background:var(--surface);padding:10px 14px;border-radius:10px}
+button:hover{border-color:var(--muted)}
+button:disabled,.bar input:disabled{opacity:.5;cursor:not-allowed}
+button.go{background:var(--ink);color:var(--bg);border-color:var(--ink);font-weight:600;padding:10px 22px}
+:focus-visible{outline:3px solid var(--bin);outline-offset:2px}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:20px}
+@media (max-width:700px){.grid{grid-template-columns:1fr}}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px}
+.card h2{font:700 20px/1.2 Cambria,Georgia,serif;margin:0 0 2px}
+.card.lin h2{color:var(--lin)}.card.bin h2{color:var(--bin)}
+.how{color:var(--muted);font-size:14px;margin:0 0 14px}
+.verdict{font-weight:600;min-height:3em;margin-bottom:12px}
+.stats{display:flex;gap:22px;margin-bottom:14px}
+.stat b{display:block;font:700 28px/1.1 Cambria,Georgia,serif}
+.stat span{font-size:13px;color:var(--muted)}
+.strip{position:relative;height:30px;border-radius:8px;background:var(--bg);border:1px solid var(--line);overflow:hidden}
+.strip .fill{position:absolute;left:0;top:0;bottom:0;background:var(--lin);opacity:.85;min-width:3px}
+.strip .tick{position:absolute;top:0;bottom:0;width:3px;margin-left:-1px;background:var(--bin)}
+.strip .hit{position:absolute;top:-1px;bottom:-1px;width:12px;margin-left:-6px;border:3px solid var(--ink);border-radius:50%;background:var(--surface)}
+.cap{font-size:12px;color:var(--muted);margin:6px 0 0;display:flex;justify-content:space-between}
+.compare{margin-top:14px;padding:16px 18px;border-radius:14px;background:var(--bin-soft)}
+.compare p{margin:0}.compare p+p{margin-top:6px;color:var(--muted);font-size:14px}
+.snip{margin-top:14px;padding:12px 14px;border-radius:10px;background:var(--surface);border:1px solid var(--line);font-size:14px;word-break:break-word}
+.snip mark{background:var(--warn-soft);color:var(--warn);padding:0 2px;border-radius:3px;font-weight:700}
+.err{color:var(--warn)}
+</style>
+</head>
+<body>
+<main>
+  <h1>Search your file</h1>
+  <p class="lede">Attach a text file, then search for a word in it. Linear search reads the file word by word. Binary search uses a sorted index of the same words. See how many comparisons each one needs.</p>
+
+  <label class="drop" id="drop">
+    <input type="file" id="file" accept=".txt,.csv,.md,.log,.json,.tsv,text/*">
+    <b>Choose a text file</b>
+    <span>or drop it here (.txt, .csv, .md and similar). The file stays in your browser.</span>
+  </label>
+  <div class="status" id="status"><button id="sample" type="button">Use sample text instead</button></div>
+
+  <div class="bar" role="search">
+    <input id="q" type="search" placeholder="Word to find in the file" aria-label="Word to find" autocomplete="off" spellcheck="false" disabled>
+    <button class="go" id="go" disabled>Search</button>
+    <button id="rand" disabled>Pick a word from the file</button>
+  </div>
+
+  <div class="grid">
+    <section class="card lin" aria-live="polite">
+      <h2>Linear search</h2>
+      <p class="how">Reads the words in file order until one matches.</p>
+      <div class="verdict" id="lv">Load a file to begin.</div>
+      <div class="stats"><div class="stat"><b id="lc">–</b><span>comparisons</span></div><div class="stat"><b id="lt">–</b><span>µs per search</span></div></div>
+      <div class="strip" id="ls" aria-hidden="true"></div>
+      <div class="cap"><span>start of file</span><span>end of file</span></div>
+    </section>
+    <section class="card bin" aria-live="polite">
+      <h2>Binary search</h2>
+      <p class="how">Looks in the middle of the sorted word list and discards half each time.</p>
+      <div class="verdict" id="bv">Load a file to begin.</div>
+      <div class="stats"><div class="stat"><b id="bc">–</b><span>comparisons</span></div><div class="stat"><b id="bt">–</b><span>µs per search</span></div></div>
+      <div class="strip" id="bs" aria-hidden="true"></div>
+      <div class="cap"><span>A</span><span>Z</span></div>
+    </section>
+  </div>
+
+  <div class="compare" id="cmp" hidden><p id="cmp1"></p><p id="cmp2"></p></div>
+  <div class="snip" id="snip" hidden></div>
+</main>
+
+<script>
+(function(){
+  var $=function(i){return document.getElementById(i)};
+  var fmt=function(x){return x.toLocaleString("en-US")};
+  var words=[],lineOf=[],lines=[],sorted=[],name="";
+  var SAMPLE="Binary search is a fast way to find an item in a sorted list.\nIt compares the target with the middle item and throws away half of the list.\nLinear search is simpler. It checks the items one by one from the start.\nFor a short list the difference is tiny, but for a long list it is huge.\nA sorted index lets a search engine find a word without reading every page.\nSorting costs time once, and then every later search is quick.\nThe quick brown fox jumps over the lazy dog while the search keeps going.";
+
+  function load(text,label){
+    name=label;lines=text.split(/\r?\n/);words=[];lineOf=[];
+    var re=/[\p{L}\p{N}][\p{L}\p{N}'’-]*/gu;
+    for(var li=0;li<lines.length;li++){
+      var m,s=lines[li];re.lastIndex=0;
+      while((m=re.exec(s))){words.push(m[0].toLowerCase());lineOf.push(li)}
+    }
+    if(!words.length){$("status").innerHTML='<span class="err">No words found in this file. Try a plain text file.</span>';enable(false);return}
+    var set=Object.create(null);for(var i=0;i<words.length;i++)set[words[i]]=1;
+    var t0=performance.now();
+    sorted=Object.keys(set).sort();
+    var sortMs=performance.now()-t0;
+    $("status").innerHTML="<b>"+esc(label)+"</b>: "+fmt(words.length)+" words, "+fmt(sorted.length)+" unique. Sorting the index took "+(sortMs<1?"under 1":sortMs.toFixed(1))+" ms (paid once).";
+    enable(true);
+    $("q").value=words[Math.floor(words.length*0.8)];
+    run();
+  }
+  function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML}
+  function enable(on){["q","go","rand"].forEach(function(i){$(i).disabled=!on})}
+
+  function linear(q){for(var i=0;i<words.length;i++){if(words[i]===q)return i}return -1}
+  function binary(q){
+    var lo=0,hi=sorted.length-1,probes=[],idx=-1;
+    while(lo<=hi){
+      var mid=(lo+hi)>>1;probes.push(mid);
+      var w=sorted[mid];
+      if(w===q){idx=mid;break}
+      if(w<q)lo=mid+1;else hi=mid-1;
+    }
+    return {idx:idx,probes:probes};
+  }
+  function time(fn,q,n){
+    var reps=Math.max(20,Math.floor(2000000/n)),t0=performance.now();
+    for(var r=0;r<reps;r++)fn(q);
+    return (performance.now()-t0)*1000/reps;
+  }
+  function us(x){return x<10?x.toFixed(2):x<100?x.toFixed(1):Math.round(x).toString()}
+  function hit(p){var h=document.createElement("div");h.className="hit";h.style.left=Math.min(98,Math.max(2,p))+"%";return h}
+
+  function run(){
+    var q=$("q").value.trim().toLowerCase();
+    if(!q||!words.length)return;
+    var N=words.length,M=sorted.length;
+    var li=linear(q),lc=li<0?N:li+1;
+    var b=binary(q),bc=b.probes.length;
+    var lt=time(linear,q,N),bt=time(binary,q,M);
+
+    $("lv").textContent=li<0?"“"+q+"” isn’t in the file. Checked all "+fmt(N)+" words.":"Found “"+q+"” as word "+fmt(li+1)+" of "+fmt(N)+", on line "+fmt(lineOf[li]+1)+".";
+    $("bv").textContent=b.idx<0?"“"+q+"” isn’t in the index.":"Found “"+q+"” at position "+fmt(b.idx+1)+" of "+fmt(M)+" in the sorted list.";
+    $("lc").textContent=fmt(lc);$("bc").textContent=fmt(bc);
+    $("lt").textContent=us(lt);$("bt").textContent=us(bt);
+
+    var ls=$("ls");ls.innerHTML="";
+    var f=document.createElement("div");f.className="fill";f.style.width=(lc/N*100)+"%";ls.appendChild(f);
+    if(li>=0)ls.appendChild(hit(li/Math.max(1,N-1)*100));
+
+    var bs=$("bs");bs.innerHTML="";
+    b.probes.forEach(function(p,i){
+      var t=document.createElement("div");t.className="tick";t.style.left=(p/Math.max(1,M-1)*100)+"%";
+      t.style.opacity=(0.35+0.65*(i+1)/b.probes.length).toFixed(2);bs.appendChild(t);
+    });
+    if(b.idx>=0)bs.appendChild(hit(b.idx/Math.max(1,M-1)*100));
+
+    $("cmp").hidden=false;
+    if(li>=0){
+      var ratio=lc/bc;
+      $("cmp1").textContent="Binary search used "+fmt(bc)+" comparisons; linear search used "+fmt(lc)+(ratio>=1.5?" ("+ratio.toFixed(ratio<10?1:0)+" times as many).":".");
+    }else{
+      $("cmp1").textContent="Word not in the file: linear search had to read all "+fmt(N)+" words, binary search needed only "+fmt(bc)+" comparisons.";
+    }
+    $("cmp2").textContent=M<50?"This file is small, so the gap is small. Try a longer file to see binary search pull ahead.":"Linear search grows with the file size (O(n)). Binary search grows with its logarithm (O(log n)), but needs the sorted index first.";
+
+    var sn=$("snip");
+    if(li>=0){
+      var line=lines[lineOf[li]].trim(),k=line.toLowerCase().indexOf(q);
+      if(line.length>200){var st=Math.max(0,k-80);line=(st?"…":"")+line.slice(st,st+200)+"…";k=line.toLowerCase().indexOf(q)}
+      sn.innerHTML="";
+      sn.appendChild(document.createTextNode("Line "+fmt(lineOf[li]+1)+": "));
+      if(k>=0){
+        sn.appendChild(document.createTextNode(line.slice(0,k)));
+        var mk=document.createElement("mark");mk.textContent=line.slice(k,k+q.length);sn.appendChild(mk);
+        sn.appendChild(document.createTextNode(line.slice(k+q.length)));
+      }else sn.appendChild(document.createTextNode(line));
+      sn.hidden=false;
+    }else sn.hidden=true;
+  }
+
+  function readFile(f){
+    if(!f)return;
+    $("status").textContent="Reading "+f.name+"…";
+    f.text().then(function(t){load(t,f.name)},function(){$("status").innerHTML='<span class="err">Couldn’t read that file. Try a plain text file.</span>'});
+  }
+  $("file").onchange=function(){readFile(this.files[0])};
+  var d=$("drop");
+  ["dragenter","dragover"].forEach(function(e){d.addEventListener(e,function(ev){ev.preventDefault();d.classList.add("over")})});
+  ["dragleave","drop"].forEach(function(e){d.addEventListener(e,function(ev){ev.preventDefault();d.classList.remove("over")})});
+  d.addEventListener("drop",function(ev){readFile(ev.dataTransfer.files[0])});
+  $("sample").onclick=function(){load(SAMPLE,"sample text")};
+  $("go").onclick=run;
+  $("q").addEventListener("keydown",function(e){if(e.key==="Enter")run()});
+  $("rand").onclick=function(){$("q").value=words[Math.floor(Math.random()*words.length)];run()};
+})();
+</script>
+</body>
+</html>
